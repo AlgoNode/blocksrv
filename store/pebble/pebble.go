@@ -66,12 +66,16 @@ func New(cfg *koanf.Koanf) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	bVal, closer, err := db.Get([]byte(keyLastRound))
+	key := []byte(keyLastRound)
+	bVal, closer, err := db.Get(key)
 	if err != nil {
-		return nil, err
+		buf := make([]byte, 8)
+		binary.LittleEndian.PutUint64(buf, 0)
+		db.Set(key, buf, &pebble.WriteOptions{Sync: true})
+		bVal = buf
+	} else {
+		defer closer.Close()
 	}
-	defer closer.Close()
 	last := binary.LittleEndian.Uint64(bVal)
 
 	c := &Client{

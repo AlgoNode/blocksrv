@@ -13,7 +13,38 @@
     "host": "blocks-mainnet.4160.nodely.io",
     "basePath": "/v2",
     "paths": {
-        "/v2/sync": {
+        "/v2/deltas/{round}": {
+            "get": {
+                "description": "GetLedgerStateDelta",
+                "tags": [
+                    "Ledger"
+                ],
+                "summary": "GetLedgerStateDelta",
+                "operationId": "GetLedgerStateDelta",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "example": 1,
+                        "description": "round number",
+                        "name": "round",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "500": {
+                        "description": "Internal Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v2/ledger/sync": {
             "get": {
                 "description": "Sync",
                 "tags": [
@@ -37,12 +68,12 @@
                 }
             },
             "post": {
-                "description": "GetLedgerStateDelta",
+                "description": "Sync",
                 "tags": [
-                    "Ledger"
+                    "Sync"
                 ],
-                "summary": "GetLedgerStateDelta",
-                "operationId": "GetLedgerStateDelta",
+                "summary": "Sync",
+                "operationId": "SyncPost",
                 "responses": {
                     "200": {
                         "description": "OK"

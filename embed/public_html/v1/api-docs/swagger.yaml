@@ -27,7 +27,28 @@ info:
   title: Nodely Block Server v0 API
   version: '@2023-11-01'
 paths:
-  /v2/sync:
+  /v2/deltas/{round}:
+    get:
+      description: GetLedgerStateDelta
+      operationId: GetLedgerStateDelta
+      parameters:
+      - description: round number
+        example: 1
+        in: path
+        name: round
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: OK
+        "500":
+          description: Internal Error
+          schema:
+            $ref: '#/definitions/server.ErrResponse'
+      summary: GetLedgerStateDelta
+      tags:
+      - Ledger
+  /v2/ledger/sync:
     delete:
       description: Sync
       operationId: SyncDelete
@@ -57,8 +78,8 @@ paths:
       tags:
       - Sync
     post:
-      description: GetLedgerStateDelta
-      operationId: GetLedgerStateDelta
+      description: Sync
+      operationId: SyncPost
       responses:
         "200":
           description: OK
@@ -66,7 +87,7 @@ paths:
           description: Internal Error
           schema:
             $ref: '#/definitions/server.ErrResponse'
-      summary: GetLedgerStateDelta
+      summary: Sync
       tags:
-      - Ledger
+      - Sync
 swagger: "2.0"

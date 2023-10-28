@@ -23,7 +23,7 @@ const blockResponseHasBlockCacheControl = "public, max-age=31536000, immutable" 
 // @Description Sync
 // @Success 200 {object} SyncGetResponse
 // @Failure 500 {object} server.ErrResponse "Internal Error"
-// @Router /v2/sync [get]
+// @Router /v2/ledger/sync [get]
 func (s *Server) SyncGet() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		data := SyncGetResponse{
@@ -41,7 +41,7 @@ func (s *Server) SyncGet() http.HandlerFunc {
 // @Description Sync
 // @Success 200
 // @Failure 500 {object} server.ErrResponse "Internal Error"
-// @Router /v2/sync [delete]
+// @Router /v2/ledger/sync [delete]
 func (s *Server) SyncDelete() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		server.RenderEmptyOK(w)
@@ -56,7 +56,7 @@ func (s *Server) SyncDelete() http.HandlerFunc {
 // @Description Sync
 // @Success 200
 // @Failure 500 {object} server.ErrResponse "Internal Error"
-// @Router /v2/sync [post]
+// @Router /v2/ledger/sync [post]
 func (s *Server) SyncPost() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		server.RenderEmptyOK(w)
@@ -69,9 +69,10 @@ func (s *Server) SyncPost() http.HandlerFunc {
 // @Tags Ledger
 // @Summary GetLedgerStateDelta
 // @Description GetLedgerStateDelta
+// @Param round path int true "round number" example(1)
 // @Success 200
 // @Failure 500 {object} server.ErrResponse "Internal Error"
-// @Router /v2/sync [post]
+// @Router /v2/deltas/{round} [get]
 func (s *Server) GetLedgerStateDelta() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		strRound := chi.URLParam(r, "round")
@@ -84,14 +85,46 @@ func (s *Server) GetLedgerStateDelta() http.HandlerFunc {
 			server.RenderErrInvalidRequest(w, err)
 			return
 		}
-		//ToDo blocking read - wait for next round
+		//TODO: blocking read - wait for next round
 		data, closer, err := s.dbStore.GetLedgerStateDelta(r.Context(), round)
 		if err != nil {
 			server.RenderErrInvalidRequest(w, err)
 			return
 		}
 		defer closer.Close()
-		server.RenderBlob(w, "application/msgpack", data, blockResponseHasBlockCacheControl)
+		dBlob, err := getDeltaBlob(data)
+		if err != nil {
+			server.RenderErrInternal(w, err)
+			return
+		}
+		server.RenderBlob(w, "application/msgpack", dBlob, blockResponseHasBlockCacheControl)
+	}
+}
 
+func (s *Server) GetLedgerBlock() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		strRound := chi.URLParam(r, "round")
+		if strRound == "" {
+			server.RenderErrInvalidRequest(w, fmt.Errorf("required round parameter missing"))
+			return
+		}
+		round, err := strconv.ParseUint(strRound, 10, 64)
+		if err != nil {
+			server.RenderErrInvalidRequest(w, err)
+			return
+		}
+		//TODO: blocking read - wait for next round
+		data, closer, err := s.dbStore.GetLedgerStateDelta(r.Context(), round)
+		if err != nil {
+			server.RenderErrInvalidRequest(w, err)
+			return
+		}
+		defer closer.Close()
+		bBlob, err := getBlockBlob(data)
+		if err != nil {
+			server.RenderErrInternal(w, err)
+			return
+		}
+		server.RenderBlob(w, "application/msgpack", bBlob, blockResponseHasBlockCacheControl)
 	}
 }

@@ -55,6 +55,10 @@ func Setup(router chi.Router, dbStore gorestapi.Ledger) error {
 		r.Get("/{round}", s.GetLedgerStateDelta())
 	})
 
+	s.router.With(cached10Sec).Route("/v2/blocks", func(r chi.Router) {
+		r.Get("/{round}", s.GetLedgerBlock())
+	})
+
 	return nil
 
 }

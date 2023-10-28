@@ -27,7 +27,7 @@ var (
 			// Database
 			db, err := pebble.New(conf.C)
 			if err != nil {
-				logger.Fatalw("Clickhouse error", "error", err)
+				logger.Fatalw("PebbleDB error", "error", err)
 			}
 
 			// Create the server
