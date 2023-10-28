@@ -1,0 +1,72 @@
+basePath: /v2
+definitions:
+  mainrpc.SyncGetResponse:
+    properties:
+      round:
+        type: integer
+    type: object
+  server.ErrResponse:
+    properties:
+      error:
+        type: string
+      error_id:
+        type: string
+      status:
+        type: string
+    type: object
+host: blocks-mainnet.4160.nodely.io
+info:
+  contact:
+    email: support@nodely.io
+    name: API Support
+    url: https://nodely.io
+  description: 'Nodely archival deltas server<hr/><p>Usage of this API for non-commercial
+    projects if free of charge.</p><p>Contact sales@nodely.io for commercial licensing.</p><p>WARNING:
+    This API uses analytical dataset that might be up to 5 minutes behind realtime
+    and results might be cached accordingly.</p>'
+  title: Nodely Block Server v0 API
+  version: '@2023-11-01'
+paths:
+  /v2/sync:
+    delete:
+      description: Sync
+      operationId: SyncDelete
+      responses:
+        "200":
+          description: OK
+        "500":
+          description: Internal Error
+          schema:
+            $ref: '#/definitions/server.ErrResponse'
+      summary: Sync
+      tags:
+      - Sync
+    get:
+      description: Sync
+      operationId: SyncGet
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/mainrpc.SyncGetResponse'
+        "500":
+          description: Internal Error
+          schema:
+            $ref: '#/definitions/server.ErrResponse'
+      summary: Sync
+      tags:
+      - Sync
+    post:
+      description: GetLedgerStateDelta
+      operationId: GetLedgerStateDelta
+      responses:
+        "200":
+          description: OK
+        "500":
+          description: Internal Error
+          schema:
+            $ref: '#/definitions/server.ErrResponse'
+      summary: GetLedgerStateDelta
+      tags:
+      - Ledger
+swagger: "2.0"

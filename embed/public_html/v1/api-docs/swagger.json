@@ -1,0 +1,103 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "Nodely archival deltas server\u003chr/\u003e\u003cp\u003eUsage of this API for non-commercial projects if free of charge.\u003c/p\u003e\u003cp\u003eContact sales@nodely.io for commercial licensing.\u003c/p\u003e\u003cp\u003eWARNING: This API uses analytical dataset that might be up to 5 minutes behind realtime and results might be cached accordingly.\u003c/p\u003e",
+        "title": "Nodely Block Server v0 API",
+        "contact": {
+            "name": "API Support",
+            "url": "https://nodely.io",
+            "email": "support@nodely.io"
+        },
+        "version": "@2023-11-01"
+    },
+    "host": "blocks-mainnet.4160.nodely.io",
+    "basePath": "/v2",
+    "paths": {
+        "/v2/sync": {
+            "get": {
+                "description": "Sync",
+                "tags": [
+                    "Sync"
+                ],
+                "summary": "Sync",
+                "operationId": "SyncGet",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/mainrpc.SyncGetResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "GetLedgerStateDelta",
+                "tags": [
+                    "Ledger"
+                ],
+                "summary": "GetLedgerStateDelta",
+                "operationId": "GetLedgerStateDelta",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "500": {
+                        "description": "Internal Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Sync",
+                "tags": [
+                    "Sync"
+                ],
+                "summary": "Sync",
+                "operationId": "SyncDelete",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "500": {
+                        "description": "Internal Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "mainrpc.SyncGetResponse": {
+            "type": "object",
+            "properties": {
+                "round": {
+                    "type": "integer"
+                }
+            }
+        },
+        "server.ErrResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "error_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}
