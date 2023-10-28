@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"strconv"
 	"sync/atomic"
 
 	"github.com/cockroachdb/pebble"
@@ -22,6 +23,7 @@ const (
 type Client struct {
 	logger    *zap.SugaredLogger
 	db        *pebble.DB
+	b         *bulletin
 	lastRound atomic.Uint64
 }
 
@@ -81,6 +83,7 @@ func New(cfg *koanf.Koanf) (*Client, error) {
 	c := &Client{
 		logger: logger,
 		db:     db,
+		b:      makeBulletin(last),
 	}
 	c.lastRound.Store(last)
 	logger.Infof("Initialized PebbleDB store:%s with lastRound:%d", path, last)
@@ -88,7 +91,23 @@ func New(cfg *koanf.Koanf) (*Client, error) {
 	return c, nil
 }
 
-func (c *Client) GetLedgerStateDelta(context context.Context, round uint64) ([]byte, io.Closer, error) {
+func (c *Client) GetLedgerStateDelta(ctx context.Context, round uint64) ([]byte, io.Closer, error) {
+	if round > c.GetLedgerLastBlock() {
+		if _, err := c.WaitLedgerBlock(ctx, round); err != nil {
+			return nil, nil, err
+		}
+	}
 	key := []byte(fmt.Sprintf("dblock-%d", round))
 	return c.db.Get(key)
+}
+
+func (c *Client) PutLedgerStateDelta(context context.Context, round uint64, bData []byte) error {
+	key := []byte(fmt.Sprintf("dblock-%d", round))
+	if err := c.db.Set(key, bData, &pebble.WriteOptions{Sync: true}); err != nil {
+		return err
+	}
+	if c.updateLedgerLastBlock(round) {
+		c.logger.With("round", strconv.Itoa(int(round))).Info("New block")
+	}
+	return nil
 }

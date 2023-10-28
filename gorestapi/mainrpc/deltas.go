@@ -2,6 +2,7 @@ package mainrpc
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -85,7 +86,6 @@ func (s *Server) GetLedgerStateDelta() http.HandlerFunc {
 			server.RenderErrInvalidRequest(w, err)
 			return
 		}
-		//TODO: blocking read - wait for next round
 		data, closer, err := s.dbStore.GetLedgerStateDelta(r.Context(), round)
 		if err != nil {
 			server.RenderErrInvalidRequest(w, err)
@@ -113,7 +113,6 @@ func (s *Server) GetLedgerBlock() http.HandlerFunc {
 			server.RenderErrInvalidRequest(w, err)
 			return
 		}
-		//TODO: blocking read - wait for next round
 		data, closer, err := s.dbStore.GetLedgerStateDelta(r.Context(), round)
 		if err != nil {
 			server.RenderErrInvalidRequest(w, err)
@@ -126,5 +125,65 @@ func (s *Server) GetLedgerBlock() http.HandlerFunc {
 			return
 		}
 		server.RenderBlob(w, "application/msgpack", bBlob, blockResponseHasBlockCacheControl)
+	}
+}
+
+func (s *Server) GetLedgerBlockData() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		strRound := chi.URLParam(r, "round")
+		if strRound == "" {
+			server.RenderErrInvalidRequest(w, fmt.Errorf("required round parameter missing"))
+			return
+		}
+		round, err := strconv.ParseUint(strRound, 10, 64)
+		if err != nil {
+			server.RenderErrInvalidRequest(w, err)
+			return
+		}
+		data, closer, err := s.dbStore.GetLedgerStateDelta(r.Context(), round)
+		if err != nil {
+			server.RenderErrInvalidRequest(w, err)
+			return
+		}
+		defer closer.Close()
+		server.RenderBlob(w, "application/msgpack", data, blockResponseHasBlockCacheControl)
+	}
+}
+
+func (s *Server) PutLedgerStateDelta() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		strRound := chi.URLParam(r, "round")
+		if strRound == "" {
+			server.RenderErrInvalidRequest(w, fmt.Errorf("required round parameter missing"))
+			return
+		}
+		round, err := strconv.ParseUint(strRound, 10, 64)
+		if err != nil {
+			server.RenderErrInvalidRequest(w, err)
+			return
+		}
+		defer r.Body.Close()
+		bData, err := io.ReadAll(r.Body)
+		if err != nil {
+			server.RenderErrInternal(w, err)
+			return
+		}
+
+		bd, err := getBlockData(bData)
+		if err != nil {
+			server.RenderErrInternal(w, err)
+			return
+		}
+		if bd.Round() != round {
+			server.RenderErrInvalidRequest(w, fmt.Errorf("block round does not match URL param"))
+			return
+		}
+
+		err = s.dbStore.PutLedgerStateDelta(r.Context(), round, bData)
+		if err != nil {
+			server.RenderErrInvalidRequest(w, err)
+			return
+		}
+		server.RenderNoContent(w)
 	}
 }
