@@ -18,7 +18,7 @@ func GetVersion() http.HandlerFunc {
 		v := struct {
 			Version string `json:"version"`
 		}{
-			Version: "alloanalyticsapi-" + GitVersion,
+			Version: "blocksrv-" + GitVersion,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
