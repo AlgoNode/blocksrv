@@ -1,5 +1,7 @@
 github.com/DataDog/zstd v1.5.5 h1:oWf5W7GtOLgp6bciQYDmhHHjdhYkALu6S/5Ni9ZgSvQ=
 github.com/DataDog/zstd v1.5.5/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
+github.com/DataDog/zstd v1.5.6-0.20230824185856-869dae002e5e h1:ZIWapoIRN1VqT8GR8jAwb1Ie9GyehWjVcGh32Y2MznE=
+github.com/DataDog/zstd v1.5.6-0.20230824185856-869dae002e5e/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
 github.com/algorand/conduit v1.5.0 h1:2cv2fTnnBEFVwhTCJunSE9LU+II+UJJkM9bCSany2rQ=
 github.com/algorand/conduit v1.5.0/go.mod h1:YTnYAFpCe/IywCemMRCY3HH4SVgbWCdK1eCOCBeZwZo=
 github.com/algorand/go-algorand-sdk/v2 v2.3.0 h1:WkdZ3EleBZ+DO0KbNvdmmJLv892ghbtQI0A/H165emw=

@@ -7,7 +7,7 @@ import (
 
 type Ledger interface {
 	GetLedgerStateDelta(ctx context.Context, round uint64) ([]byte, io.Closer, error)
-	PutLedgerStateDelta(ctx context.Context, round uint64, bData []byte) error
+	PutLedgerBlockData(ctx context.Context, round uint64, bData []byte) error
 	GetLedgerLastBlock() uint64
 	WaitLedgerBlock(ctx context.Context, round uint64) (uint64, error)
 }

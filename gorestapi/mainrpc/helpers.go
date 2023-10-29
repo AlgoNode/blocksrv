@@ -7,7 +7,7 @@ import (
 	"github.com/algorand/go-algorand-sdk/v2/types"
 )
 
-func getDelta(blob []byte) (*types.LedgerStateDelta, error) {
+func getDeltaFromBD(blob []byte) (*types.LedgerStateDelta, error) {
 	bd := &data.BlockData{}
 	if err := msgpack.Decode(blob, bd); err != nil {
 		return nil, err
@@ -15,7 +15,7 @@ func getDelta(blob []byte) (*types.LedgerStateDelta, error) {
 	return bd.Delta, nil
 }
 
-func getBlockData(blob []byte) (*data.BlockData, error) {
+func getBlockDataFromBDBlob(blob []byte) (*data.BlockData, error) {
 	bd := &data.BlockData{}
 	if err := msgpack.Decode(blob, bd); err != nil {
 		return nil, err
@@ -23,15 +23,15 @@ func getBlockData(blob []byte) (*data.BlockData, error) {
 	return bd, nil
 }
 
-func getDeltaBlob(blob []byte) ([]byte, error) {
-	delta, err := getDelta(blob)
+func getDeltaBlobFromBDBlob(blob []byte) ([]byte, error) {
+	delta, err := getDeltaFromBD(blob)
 	if err != nil {
 		return nil, err
 	}
 	return msgpack.Encode(delta), nil
 }
 
-func getBlock(blob []byte) (*models.BlockResponse, error) {
+func getBlockFromBDBlob(blob []byte) (*models.BlockResponse, error) {
 	tmpBlk := new(models.BlockResponse)
 	bd := &data.BlockData{}
 	if err := msgpack.Decode(blob, bd); err != nil {
@@ -43,8 +43,8 @@ func getBlock(blob []byte) (*models.BlockResponse, error) {
 	return tmpBlk, nil
 }
 
-func getBlockBlob(blob []byte) ([]byte, error) {
-	blk, err := getBlock(blob)
+func getBlockBlobFromBDBlob(blob []byte) ([]byte, error) {
+	blk, err := getBlockFromBDBlob(blob)
 	if err != nil {
 		return nil, err
 	}

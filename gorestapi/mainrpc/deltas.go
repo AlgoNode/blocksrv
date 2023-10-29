@@ -92,7 +92,7 @@ func (s *Server) GetLedgerStateDelta() http.HandlerFunc {
 			return
 		}
 		defer closer.Close()
-		dBlob, err := getDeltaBlob(data)
+		dBlob, err := getDeltaBlobFromBDBlob(data)
 		if err != nil {
 			server.RenderErrInternal(w, err)
 			return
@@ -119,7 +119,7 @@ func (s *Server) GetLedgerBlock() http.HandlerFunc {
 			return
 		}
 		defer closer.Close()
-		bBlob, err := getBlockBlob(data)
+		bBlob, err := getBlockBlobFromBDBlob(data)
 		if err != nil {
 			server.RenderErrInternal(w, err)
 			return
@@ -169,7 +169,7 @@ func (s *Server) PutLedgerStateDelta() http.HandlerFunc {
 			return
 		}
 
-		bd, err := getBlockData(bData)
+		bd, err := getBlockDataFromBDBlob(bData)
 		if err != nil {
 			server.RenderErrInternal(w, err)
 			return
@@ -179,7 +179,7 @@ func (s *Server) PutLedgerStateDelta() http.HandlerFunc {
 			return
 		}
 
-		err = s.dbStore.PutLedgerStateDelta(r.Context(), round, bData)
+		err = s.dbStore.PutLedgerBlockData(r.Context(), round, bData)
 		if err != nil {
 			server.RenderErrInvalidRequest(w, err)
 			return

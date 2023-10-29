@@ -101,7 +101,7 @@ func (c *Client) GetLedgerStateDelta(ctx context.Context, round uint64) ([]byte,
 	return c.db.Get(key)
 }
 
-func (c *Client) PutLedgerStateDelta(context context.Context, round uint64, bData []byte) error {
+func (c *Client) PutLedgerBlockData(context context.Context, round uint64, bData []byte) error {
 	key := []byte(fmt.Sprintf("dblock-%d", round))
 	if err := c.db.Set(key, bData, &pebble.WriteOptions{Sync: true}); err != nil {
 		return err
