@@ -113,3 +113,16 @@ func (c *Client) PutLedgerBlockData(context context.Context, round uint64, bData
 	}()
 	return nil
 }
+
+func (c *Client) GetLedgerGenesis(ctx context.Context) ([]byte, io.Closer, error) {
+	key := []byte("genesis")
+	return c.db.Get(key)
+}
+
+func (c *Client) PutLedgerGenesis(context context.Context, gData []byte) error {
+	key := []byte("genesis")
+	if err := c.db.Set(key, gData, &pebble.WriteOptions{Sync: true}); err != nil {
+		return err
+	}
+	return nil
+}

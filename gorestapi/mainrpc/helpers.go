@@ -50,3 +50,11 @@ func getBlockBlobFromBDBlob(blob []byte) ([]byte, error) {
 	}
 	return msgpack.Encode(blk), nil
 }
+
+func getGenesisFromGenesisBlob(blob []byte) (*types.Genesis, error) {
+	g := &types.Genesis{}
+	if err := msgpack.Decode(blob, g); err != nil {
+		return nil, err
+	}
+	return g, nil
+}

@@ -187,3 +187,39 @@ func (s *Server) PutLedgerStateDelta() http.HandlerFunc {
 		server.RenderNoContent(w)
 	}
 }
+
+func (s *Server) GetLedgerGenesis() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		blob, closer, err := s.dbStore.GetLedgerGenesis(r.Context())
+		if err != nil {
+			server.RenderErrInvalidRequest(w, err)
+			return
+		}
+		defer closer.Close()
+		server.RenderBlob(w, "application/msgpack", blob, blockResponseHasBlockCacheControl)
+	}
+}
+
+func (s *Server) PutLedgerGenesis() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		gData, err := io.ReadAll(r.Body)
+		if err != nil {
+			server.RenderErrInternal(w, err)
+			return
+		}
+
+		_, err = getGenesisFromGenesisBlob(gData)
+		if err != nil {
+			server.RenderErrInternal(w, err)
+			return
+		}
+
+		err = s.dbStore.PutLedgerGenesis(r.Context(), gData)
+		if err != nil {
+			server.RenderErrInvalidRequest(w, err)
+			return
+		}
+		server.RenderNoContent(w)
+	}
+}
