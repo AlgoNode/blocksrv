@@ -98,7 +98,7 @@ func New(cfg *koanf.Koanf) (*Client, error) {
 func (c *Client) saveLastRnd(round uint64) error {
 	buf := make([]byte, 8)
 	key := []byte(keyLastRound)
-	binary.LittleEndian.PutUint64(buf, 0)
+	binary.LittleEndian.PutUint64(buf, round)
 	return c.db.Set(key, buf, pebble.Sync)
 }
 
