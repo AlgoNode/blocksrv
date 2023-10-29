@@ -184,7 +184,7 @@ func (s *Server) PutLedgerStateDelta() http.HandlerFunc {
 			server.RenderErrInvalidRequest(w, err)
 			return
 		}
-		server.RenderNoContent(w)
+		server.RenderEmptyOK(w)
 	}
 }
 
@@ -220,6 +220,6 @@ func (s *Server) PutLedgerGenesis() http.HandlerFunc {
 			server.RenderErrInvalidRequest(w, err)
 			return
 		}
-		server.RenderNoContent(w)
+		server.RenderEmptyOK(w)
 	}
 }
