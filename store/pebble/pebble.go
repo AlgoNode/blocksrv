@@ -2,6 +2,7 @@ package pebble
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -9,6 +10,8 @@ import (
 	"strconv"
 	"sync/atomic"
 
+	"github.com/algorand/go-algorand-sdk/v2/encoding/msgpack"
+	"github.com/algorand/go-algorand-sdk/v2/types"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/knadh/koanf/v2"
@@ -17,6 +20,7 @@ import (
 
 const (
 	keyLastRound = "lastRound"
+	keyGenesis   = "genesis"
 )
 
 // Client is the database client
@@ -88,9 +92,12 @@ func New(cfg *koanf.Koanf) (*Client, error) {
 		c.saveLastRnd(last)
 	}
 
+	key = []byte(keyGenesis)
+	bVal, closer, err = db.Get(key)
+
 	c.b = makeBulletin(last)
 	c.lastRound.Store(last)
-	logger.Infof("Initialized PebbleDB store:%s with lastRound:%d", path, last)
+	logger.Infof("Initialized PebbleDB store:%s with lastRound:%d GH:%s", path, last, c.GetLedgerGenesisB64())
 
 	return c, nil
 }
@@ -159,12 +166,28 @@ func (c *Client) PutLedgerBlockData(context context.Context, round uint64, bData
 }
 
 func (c *Client) GetLedgerGenesis(ctx context.Context) ([]byte, io.Closer, error) {
-	key := []byte("genesis")
+	key := []byte(keyGenesis)
 	return c.db.Get(key)
 }
 
+func (c *Client) GetLedgerGenesisB64() string {
+	gBlob, closer, err := c.GetLedgerGenesis(context.Background())
+	if err != nil {
+		return ""
+	}
+	g := &types.Genesis{}
+	err = msgpack.Decode(gBlob, g)
+	if err != nil {
+		return ""
+	}
+	gh := g.Hash()
+	ghb64 := base64.StdEncoding.EncodeToString(gh[:])
+	closer.Close()
+	return ghb64
+}
+
 func (c *Client) PutLedgerGenesis(context context.Context, gData []byte) error {
-	key := []byte("genesis")
+	key := []byte(keyGenesis)
 	if err := c.db.Set(key, gData, &pebble.WriteOptions{Sync: true}); err != nil {
 		return err
 	}
