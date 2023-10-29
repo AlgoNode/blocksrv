@@ -15,7 +15,6 @@ require (
 	github.com/algorand/go-algorand-sdk/v2 v2.3.0
 	github.com/cockroachdb/pebble v0.0.0-20231027194153-ed45a7767175
 	github.com/go-chi/chi/v5 v5.0.10
-	github.com/go-chi/stampede v0.5.1
 	github.com/knadh/koanf/parsers/json v0.1.0
 	github.com/knadh/koanf/parsers/toml v0.1.0
 	github.com/knadh/koanf/parsers/yaml v0.1.0
@@ -39,7 +38,6 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/uuid v1.4.0 // indirect
-	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.17.2 // indirect
 	github.com/knadh/koanf/maps v0.1.1 // indirect
