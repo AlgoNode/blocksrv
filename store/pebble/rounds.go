@@ -23,6 +23,7 @@ func (c *Client) updateLedgerLastBlock(newLast uint64) bool {
 	currentLast := c.lastRound.Load()
 	if newLast > currentLast && c.lastRound.CompareAndSwap(currentLast, newLast) {
 		c.b.notifyRound(newLast)
+		c.saveLastRnd(newLast)
 		return true
 	}
 	return false

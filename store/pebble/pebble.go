@@ -68,27 +68,71 @@ func New(cfg *koanf.Koanf) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	key := []byte(keyLastRound)
-	bVal, closer, err := db.Get(key)
-	if err != nil {
-		buf := make([]byte, 8)
-		binary.LittleEndian.PutUint64(buf, 0)
-		db.Set(key, buf, &pebble.WriteOptions{Sync: true})
-		bVal = buf
-	} else {
-		defer closer.Close()
-	}
-	last := binary.LittleEndian.Uint64(bVal)
 
 	c := &Client{
 		logger: logger,
 		db:     db,
-		b:      makeBulletin(last),
 	}
+
+	key := []byte(keyLastRound)
+	bVal, closer, err := db.Get(key)
+	last := uint64(0)
+	if err != nil {
+		last = 0
+	} else {
+		last = binary.LittleEndian.Uint64(bVal)
+		defer closer.Close()
+	}
+	if last == 0 {
+		last = c.findLast()
+		c.saveLastRnd(last)
+	}
+
+	c.b = makeBulletin(last)
 	c.lastRound.Store(last)
 	logger.Infof("Initialized PebbleDB store:%s with lastRound:%d", path, last)
 
 	return c, nil
+}
+
+func (c *Client) saveLastRnd(round uint64) error {
+	buf := make([]byte, 8)
+	key := []byte(fmt.Sprintf("dblock-%d", round))
+	binary.LittleEndian.PutUint64(buf, round)
+	return c.db.Set(key, buf, &pebble.WriteOptions{Sync: true})
+}
+
+func (c *Client) existsRnd(round uint64) bool {
+	key := []byte(fmt.Sprintf("dblock-%d", round))
+	_, closer, err := c.db.Get(key)
+	if err != nil {
+		return false
+	}
+	closer.Close()
+	c.logger.Infof("exists %d", round)
+	return true
+}
+
+func (c *Client) findLast() uint64 {
+	n := uint64(100_000_000)
+	l := uint64(0)
+	h := n - 1
+	c.logger.Infof("looking for last round %d..%d", l, h)
+	for h > l {
+		mid := (h + l) >> 1
+		if c.existsRnd(mid) {
+			l = mid
+		} else {
+			h = mid - 1
+		}
+		if h-l == 1 {
+			if c.existsRnd(h) {
+				return h
+			}
+			return l
+		}
+	}
+	return l
 }
 
 func (c *Client) GetLedgerStateDelta(ctx context.Context, round uint64) ([]byte, io.Closer, error) {
