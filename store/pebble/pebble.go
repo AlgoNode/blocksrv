@@ -106,8 +106,10 @@ func (c *Client) PutLedgerBlockData(context context.Context, round uint64, bData
 	if err := c.db.Set(key, bData, &pebble.WriteOptions{Sync: true}); err != nil {
 		return err
 	}
-	if c.updateLedgerLastBlock(round) {
-		c.logger.With("round", strconv.Itoa(int(round))).Info("New block")
-	}
+	go func() {
+		if c.updateLedgerLastBlock(round) {
+			c.logger.With("round", strconv.Itoa(int(round))).Info("New block")
+		}
+	}()
 	return nil
 }

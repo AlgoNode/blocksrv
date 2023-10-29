@@ -10,4 +10,4 @@ FROM gcr.io/distroless/static
 
 COPY --from=build-env /go/src/app/gorestapicmd /app/blocksrv
 COPY --from=build-env /go/src/app/embed/public_html /app/embed
-CMD ["/app/blocksrv"]
+CMD ["/app/blocksrv","api"]
