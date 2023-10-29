@@ -97,9 +97,9 @@ func New(cfg *koanf.Koanf) (*Client, error) {
 
 func (c *Client) saveLastRnd(round uint64) error {
 	buf := make([]byte, 8)
-	key := []byte(fmt.Sprintf("dblock-%d", round))
-	binary.LittleEndian.PutUint64(buf, round)
-	return c.db.Set(key, buf, &pebble.WriteOptions{Sync: true})
+	key := []byte(keyLastRound)
+	binary.LittleEndian.PutUint64(buf, 0)
+	return c.db.Set(key, buf, pebble.Sync)
 }
 
 func (c *Client) existsRnd(round uint64) bool {
