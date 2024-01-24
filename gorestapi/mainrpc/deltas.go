@@ -92,12 +92,22 @@ func (s *Server) GetLedgerStateDelta() http.HandlerFunc {
 			return
 		}
 		defer closer.Close()
-		dBlob, err := getDeltaBlobFromBDBlob(data)
+		format := r.URL.Query().Get("format")
+		if format == "msgp" || format == "msgpack" {
+			dBlob, err := getDeltaBlobFromBDBlob(data)
+			if err != nil {
+				server.RenderErrInternal(w, err)
+				return
+			}
+			server.RenderBlob(w, "application/msgpack", dBlob, blockResponseHasBlockCacheControl)
+			return
+		}
+		delta, err := getDeltaFromBD(data)
 		if err != nil {
 			server.RenderErrInternal(w, err)
 			return
 		}
-		server.RenderBlob(w, "application/msgpack", dBlob, blockResponseHasBlockCacheControl)
+		server.RenderJSON(w, 200, delta)
 	}
 }
 
