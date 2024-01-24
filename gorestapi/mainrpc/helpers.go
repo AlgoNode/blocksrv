@@ -3,6 +3,7 @@ package mainrpc
 import (
 	"github.com/algorand/conduit/conduit/data"
 	"github.com/algorand/go-algorand-sdk/v2/client/v2/common/models"
+	"github.com/algorand/go-algorand-sdk/v2/encoding/json"
 	"github.com/algorand/go-algorand-sdk/v2/encoding/msgpack"
 	"github.com/algorand/go-algorand-sdk/v2/types"
 )
@@ -57,4 +58,12 @@ func getGenesisFromGenesisBlob(blob []byte) (*types.Genesis, error) {
 		return nil, err
 	}
 	return g, nil
+}
+
+func getJSONDeltaFromBD(blob []byte) ([]byte, error) {
+	delta, err := getDeltaFromBD(blob)
+	if err != nil {
+		return nil, err
+	}
+	return json.Encode(delta), nil
 }

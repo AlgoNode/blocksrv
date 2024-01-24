@@ -102,12 +102,12 @@ func (s *Server) GetLedgerStateDelta() http.HandlerFunc {
 			server.RenderBlob(w, "application/msgpack", dBlob, blockResponseHasBlockCacheControl)
 			return
 		}
-		delta, err := getDeltaFromBD(data)
+		delta, err := getJSONDeltaFromBD(data)
 		if err != nil {
 			server.RenderErrInternal(w, err)
 			return
 		}
-		server.RenderJSON(w, 200, delta)
+		server.RenderBlob(w, "application/json", delta, "")
 	}
 }
 
