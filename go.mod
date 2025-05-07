@@ -13,8 +13,8 @@ require (
 )
 
 require (
-	github.com/algorand/conduit v1.8.0
-	github.com/algorand/go-algorand-sdk/v2 v2.7.0
+	github.com/algorand/conduit v1.8.1
+	github.com/algorand/go-algorand-sdk/v2 v2.8.0
 	github.com/cockroachdb/pebble v1.1.2
 	github.com/go-chi/chi/v5 v5.1.0
 	github.com/knadh/koanf/parsers/json v0.1.0
