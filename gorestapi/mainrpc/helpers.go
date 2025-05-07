@@ -62,6 +62,7 @@ func getGenesisFromGenesisBlob(blob []byte) (*types.Genesis, error) {
 
 func getJSONDeltaFromBD(blob []byte) ([]byte, error) {
 	delta, err := getDeltaFromBD(blob)
+	delta.Txleases = nil
 	if err != nil {
 		return nil, err
 	}
