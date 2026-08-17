@@ -34,6 +34,7 @@ mocks: tools
 .PHONY: ${EXECUTABLE}
 ${EXECUTABLE}: tools embed/public_html/v1/api-docs/swagger.json
 	# Compiling...
+	go mod tidy
 	CGO_ENABLED=0 go build -ldflags "-X ${PACKAGENAME}/conf.Executable=${EXECUTABLE} -X ${PACKAGENAME}/conf.GitVersion=${GITVERSION}" -o ${EXECUTABLE}
 
 
