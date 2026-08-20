@@ -1,5 +1,5 @@
 EXECUTABLE := gorestapicmd
-GITVERSION := $(shell git describe --dirty --always --tags --long)
+GITVERSION ?= 1.10.0-blksrv
 GOPATH ?= ${HOME}/go
 PACKAGENAME := $(shell go list -m -f '{{.Path}}')
 TOOLS := ${GOPATH}/bin/mockery \
