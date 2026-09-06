@@ -40,6 +40,8 @@ func TestIntegration(t *testing.T) {
 		Bucket:    bucket,
 		Prefix:    fmt.Sprintf("it-%d", time.Now().UnixNano()),
 		Timeout:   20 * time.Second,
+
+		LatestInterval: 50 * time.Millisecond,
 	}
 	ctx := context.Background()
 

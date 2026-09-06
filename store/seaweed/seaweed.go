@@ -28,8 +28,9 @@ import (
 )
 
 const (
-	probeLimit    = 100_000
-	closeWaitTime = 15 * time.Second
+	probeLimit            = 100_000
+	closeWaitTime         = 15 * time.Second
+	defaultLatestInterval = 5 * time.Second
 )
 
 // Config is the SeaweedFS S3 backend configuration.
@@ -43,20 +44,23 @@ type Config struct {
 	Prefix     string
 	Timeout    time.Duration // per S3 call
 	MaxRetries int
+	// LatestInterval rate limits latest.json writes; 0 means the 5s default.
+	LatestInterval time.Duration
 }
 
 // ConfigFromKoanf reads the seaweed.* keys.
 func ConfigFromKoanf(k *koanf.Koanf) Config {
 	return Config{
-		Endpoint:   k.String("seaweed.endpoint"),
-		UseSSL:     k.Bool("seaweed.use_ssl"),
-		AccessKey:  k.String("seaweed.access_key"),
-		SecretKey:  k.String("seaweed.secret_key"),
-		Region:     k.String("seaweed.region"),
-		Bucket:     k.String("seaweed.bucket"),
-		Prefix:     k.String("seaweed.prefix"),
-		Timeout:    k.Duration("seaweed.timeout"),
-		MaxRetries: k.Int("seaweed.max_retries"),
+		Endpoint:       k.String("seaweed.endpoint"),
+		UseSSL:         k.Bool("seaweed.use_ssl"),
+		AccessKey:      k.String("seaweed.access_key"),
+		SecretKey:      k.String("seaweed.secret_key"),
+		Region:         k.String("seaweed.region"),
+		Bucket:         k.String("seaweed.bucket"),
+		Prefix:         k.String("seaweed.prefix"),
+		Timeout:        k.Duration("seaweed.timeout"),
+		MaxRetries:     k.Int("seaweed.max_retries"),
+		LatestInterval: k.Duration("seaweed.latest_interval"),
 	}
 }
 
@@ -102,6 +106,9 @@ func NewWithConfig(cfg Config) (*Client, error) {
 	}
 	if cfg.MaxRetries <= 0 {
 		cfg.MaxRetries = 3
+	}
+	if cfg.LatestInterval <= 0 {
+		cfg.LatestInterval = defaultLatestInterval
 	}
 
 	var creds *credentials.Credentials
@@ -163,7 +170,7 @@ func newFromStore(logger *zap.SugaredLogger, st objectStore, cfg Config) (*Clien
 		return nil, err
 	}
 	c.rt = rounds.New(last)
-	c.latest = newLatestWriter(logger, st, c.lay.latestKey(), c.rt, c.GetLedgerGenesisInfo, doc)
+	c.latest = newLatestWriter(logger, st, c.lay.latestKey(), c.rt, c.GetLedgerGenesisInfo, doc, cfg.LatestInterval)
 	c.latest.kick() // no-op unless the pointer or genesis info is stale
 	logger.Infof("Initialized SeaweedFS store bucket:%s prefix:%q with lastRound:%d GH:%s",
 		cfg.Bucket, c.lay.prefix, last, c.GetLedgerGenesisB64())

@@ -97,7 +97,7 @@ func blockBlob(round uint64) []byte {
 
 func newTestClient(t *testing.T, st objectStore) *Client {
 	t.Helper()
-	c, err := newFromStore(testLogger(), st, Config{Bucket: "test", Timeout: time.Second})
+	c, err := newFromStore(testLogger(), st, Config{Bucket: "test", Timeout: time.Second, LatestInterval: 10 * time.Millisecond})
 	if err != nil {
 		t.Fatalf("newFromStore: %v", err)
 	}
@@ -312,6 +312,59 @@ func TestLatestWriterCoalescesAndIsMonotonic(t *testing.T) {
 	}
 	if c.latest.current().LastRound != n {
 		t.Fatalf("persisted = %d", c.latest.current().LastRound)
+	}
+}
+
+func TestLatestWriterRateLimit(t *testing.T) {
+	st := newMemStore()
+	c, err := newFromStore(testLogger(), st, Config{Bucket: "test", LatestInterval: 300 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	before := st.putCount()
+	start := time.Now()
+	for i := uint64(1); i <= 200; i++ {
+		c.rt.Advance(i)
+		c.latest.kick()
+		time.Sleep(2 * time.Millisecond) // ~400ms of continuous kicks
+	}
+	waitFor(t, "final pointer", func() bool {
+		doc, ok := readLatest(t, st, "latest.json")
+		return ok && doc.LastRound == 200
+	})
+	elapsed := time.Since(start)
+	writes := st.putCount() - before
+	// first write is immediate, then at most one per 300ms
+	maxWrites := 1 + int(elapsed/(300*time.Millisecond)) + 1
+	if writes > maxWrites {
+		t.Fatalf("%d latest.json writes in %s; rate limit allows at most %d", writes, elapsed, maxWrites)
+	}
+	if writes < 2 {
+		t.Fatalf("expected at least 2 writes, got %d", writes)
+	}
+}
+
+func TestLatestWriterFlushesOnClose(t *testing.T) {
+	st := newMemStore()
+	c, err := newFromStore(testLogger(), st, Config{Bucket: "test", LatestInterval: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.PutLedgerBlockData(context.Background(), 1, blockBlob(1)); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "first write", func() bool { doc, ok := readLatest(t, st, "latest.json"); return ok && doc.LastRound == 1 })
+	if err := c.PutLedgerBlockData(context.Background(), 2, blockBlob(2)); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if doc, _ := readLatest(t, st, "latest.json"); doc.LastRound != 1 {
+		t.Fatalf("pointer written despite rate limit: %d", doc.LastRound)
+	}
+	_ = c.Close()
+	if doc, _ := readLatest(t, st, "latest.json"); doc.LastRound != 2 {
+		t.Fatalf("Close did not flush the pointer: %d", doc.LastRound)
 	}
 }
 

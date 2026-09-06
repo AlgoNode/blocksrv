@@ -58,6 +58,7 @@ SEAWEED_BUCKET=mainnet                # one bucket per network
 SEAWEED_PREFIX=                       # optional key prefix inside the bucket, e.g. v1/
 SEAWEED_TIMEOUT=30s                   # per S3 call
 SEAWEED_MAX_RETRIES=3
+SEAWEED_LATEST_INTERVAL=5s            # rate limit for latest.json writes (final value is flushed on shutdown)
 ```
 
 ### Object layout
