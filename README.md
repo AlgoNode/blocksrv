@@ -154,3 +154,9 @@ While a backfill is running, rounds below the last round that are not imported
 yet answer 404 instead of long-polling.
 
 `GET /v2/status` returns `{"last-round":N,"genesis-id":...,"genesis-hash":...}`.
+
+Error responses follow algod's shape and messages: an unknown round answers
+`404 {"message":"failed to retrieve information from the ledger"}`, a malformed
+round `400 {"message":"Invalid format for parameter round: ..."}`, a storage
+failure 500 with the cause under `data.error`, and a genesis for another
+network `409 {"message":"conflict: ..."}`.

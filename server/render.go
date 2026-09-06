@@ -18,7 +18,7 @@ func RenderJSON(w http.ResponseWriter, code int, v interface{}) {
 	b := new(bytes.Buffer)
 	if err := json.NewEncoder(b).Encode(v); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(b, `{"render_error":"%s"}`, errString(err))
+		fmt.Fprintf(b, `{"message":"render error: %s"}`, errString(err))
 	} else {
 		w.WriteHeader(code)
 	}
@@ -33,39 +33,55 @@ func RenderNoContent(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ErrResponse has the same shape as algod's ErrorResponse: a human readable
+// message plus optional structured data.
 type ErrResponse struct {
-	Status  string `json:"status,omitempty"`
-	Error   string `json:"error,omitempty"`
-	ErrorID string `json:"error_id,omitempty"`
+	Message string                 `json:"message"`
+	Data    map[string]interface{} `json:"data,omitempty"`
 }
 
-func RenderErrNotFound(w http.ResponseWriter) {
-	RenderJSON(w, http.StatusNotFound, ErrResponse{Status: "not found", Error: "not found"})
+// RenderErr writes an algod-style error body with the given status code.
+func RenderErr(w http.ResponseWriter, code int, msg string) {
+	RenderJSON(w, code, ErrResponse{Message: msg})
+}
+
+func RenderErrNotFound(w http.ResponseWriter, msg string) {
+	RenderErr(w, http.StatusNotFound, msg)
 }
 
 func RenderErrResourceNotFound(w http.ResponseWriter, resource string) {
-	RenderJSON(w, http.StatusNotFound, ErrResponse{Status: resource + " not found", Error: resource + " not found"})
+	RenderErr(w, http.StatusNotFound, resource+" not found")
 }
 
 func RenderErrUnauthorized(w http.ResponseWriter) {
-	RenderJSON(w, http.StatusUnauthorized, ErrResponse{Status: "not authorized", Error: "not authorized"})
+	RenderErr(w, http.StatusUnauthorized, "not authorized")
 }
 
 func RenderErrInvalidRequest(w http.ResponseWriter, err error) {
-	RenderJSON(w, http.StatusBadRequest, ErrResponse{Status: "invalid request", Error: errString(err)})
+	RenderErr(w, http.StatusBadRequest, errString(err))
 }
 
 func RenderErrConflict(w http.ResponseWriter, err error) {
-	RenderJSON(w, http.StatusConflict, ErrResponse{Status: "conflict", Error: errString(err)})
+	RenderErr(w, http.StatusConflict, errString(err))
 }
 
-func RenderErrInternal(w http.ResponseWriter, err error) {
-	RenderJSON(w, http.StatusInternalServerError, ErrResponse{Status: "internal error", Error: errString(err)})
+// RenderErrInternal answers 500 with msg; the underlying error, if any, is
+// exposed under data.error so operators can see what failed.
+func RenderErrInternal(w http.ResponseWriter, msg string, err error) {
+	resp := ErrResponse{Message: msg}
+	if err != nil {
+		resp.Data = map[string]interface{}{"error": err.Error()}
+	}
+	RenderJSON(w, http.StatusInternalServerError, resp)
 }
 
-func RenderErrInternalWithID(w http.ResponseWriter, err error) string {
+func RenderErrInternalWithID(w http.ResponseWriter, msg string, err error) string {
 	errID := xid.New().String()
-	RenderJSON(w, http.StatusInternalServerError, ErrResponse{Status: "internal error", Error: errString(err), ErrorID: errID})
+	resp := ErrResponse{Message: msg, Data: map[string]interface{}{"error_id": errID}}
+	if err != nil {
+		resp.Data["error"] = err.Error()
+	}
+	RenderJSON(w, http.StatusInternalServerError, resp)
 	return errID
 }
 

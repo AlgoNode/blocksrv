@@ -125,11 +125,42 @@ func TestGetRoutes(t *testing.T) {
 	}
 }
 
+func TestErrorBodiesMatchAlgod(t *testing.T) {
+	l := &stubLedger{blocks: map[uint64][]byte{5: blockBlob(5)}, last: 5}
+	h := newRouter(t, l)
+	cases := []struct {
+		path string
+		code int
+		body string
+	}{
+		{"/v2/blocks/4", 404, `{"message":"failed to retrieve information from the ledger"}`},
+		{"/n2/conduit/blockdata/4", 404, `{"message":"failed to retrieve information from the ledger"}`},
+		{"/v2/deltas/4", 404, `{"message":"failed retrieving State Delta: round 4 not found"}`},
+		{"/n2/conduit/genesis", 404, `{"message":"genesis not found"}`},
+		{"/v2/blocks/abc", 400, `{"message":"Invalid format for parameter round: strconv.ParseUint: parsing \"abc\": invalid syntax"}`},
+		{"/v2/blocks/-1", 400, `{"message":"Invalid format for parameter round: strconv.ParseUint: parsing \"-1\": invalid syntax"}`},
+	}
+	for _, c := range cases {
+		rec := do(h, http.MethodGet, c.path, nil)
+		if rec.Code != c.code || string(bytes.TrimSpace(rec.Body.Bytes())) != c.body {
+			t.Fatalf("%s: %d %s\nwant %d %s", c.path, rec.Code, rec.Body.String(), c.code, c.body)
+		}
+		if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+			t.Fatalf("%s: Content-Type = %q", c.path, ct)
+		}
+	}
+}
+
 func TestStoreErrorsMapTo500(t *testing.T) {
 	l := &stubLedger{getErr: errors.New("gateway down")}
 	h := newRouter(t, l)
-	if rec := do(h, http.MethodGet, "/v2/blocks/1", nil); rec.Code != http.StatusInternalServerError {
+	rec := do(h, http.MethodGet, "/v2/blocks/1", nil)
+	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("code = %d, want 500", rec.Code)
+	}
+	want := `{"message":"failed to retrieve information from the ledger","data":{"error":"gateway down"}}`
+	if got := string(bytes.TrimSpace(rec.Body.Bytes())); got != want {
+		t.Fatalf("body = %s, want %s", got, want)
 	}
 }
 
@@ -177,8 +208,9 @@ func TestGenesisConflictIs409(t *testing.T) {
 	l := &stubLedger{genErr: store.ErrConflict}
 	h := newRouter(t, l)
 	g := msgpack.Encode(types.Genesis{SchemaID: "v1", Network: "net"})
-	if rec := do(h, http.MethodPut, "/n2/conduit/genesis", g); rec.Code != http.StatusConflict {
-		t.Fatalf("code = %d, want 409", rec.Code)
+	rec := do(h, http.MethodPut, "/n2/conduit/genesis", g)
+	if rec.Code != http.StatusConflict || string(bytes.TrimSpace(rec.Body.Bytes())) != `{"message":"conflict"}` {
+		t.Fatalf("code = %d body = %s, want 409 conflict", rec.Code, rec.Body.String())
 	}
 	if rec := do(h, http.MethodPut, "/n2/conduit/genesis", []byte("garbage")); rec.Code != http.StatusBadRequest {
 		t.Fatalf("garbage genesis: %d", rec.Code)

@@ -27,9 +27,13 @@ const blockResponseHasBlockCacheControl = "public, max-age=31536000, immutable" 
 func parseRound(r *http.Request) (uint64, error) {
 	strRound := chi.URLParam(r, "round")
 	if strRound == "" {
-		return 0, fmt.Errorf("required round parameter missing")
+		return 0, fmt.Errorf(errInvalidRoundParam, "missing")
 	}
-	return strconv.ParseUint(strRound, 10, 64)
+	round, err := strconv.ParseUint(strRound, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf(errInvalidRoundParam, err)
+	}
+	return round, nil
 }
 
 // SyncGet Gets
@@ -120,7 +124,7 @@ func (s *Server) GetLedgerStateDelta() http.HandlerFunc {
 		}
 		data, closer, err := s.dbStore.GetLedgerStateDelta(r.Context(), round)
 		if err != nil {
-			renderStoreErr(w, err)
+			renderStoreErr(w, err, fmt.Sprintf(errFailedRetrievingStateDelta, roundNotFound(round)))
 			return
 		}
 		defer closer.Close()
@@ -128,7 +132,7 @@ func (s *Server) GetLedgerStateDelta() http.HandlerFunc {
 		if format == "msgp" || format == "msgpack" {
 			dBlob, err := getDeltaBlobFromBDBlob(data)
 			if err != nil {
-				server.RenderErrInternal(w, err)
+				server.RenderErrInternal(w, errFailedEncodingResponse, err)
 				return
 			}
 			server.RenderBlob(w, "application/msgpack", dBlob, blockResponseHasBlockCacheControl)
@@ -136,7 +140,7 @@ func (s *Server) GetLedgerStateDelta() http.HandlerFunc {
 		}
 		delta, err := getJSONDeltaFromBD(data)
 		if err != nil {
-			server.RenderErrInternal(w, err)
+			server.RenderErrInternal(w, errFailedEncodingResponse, err)
 			return
 		}
 		server.RenderBlob(w, "application/json", delta, "")
@@ -163,13 +167,13 @@ func (s *Server) GetLedgerBlock() http.HandlerFunc {
 		}
 		data, closer, err := s.dbStore.GetLedgerStateDelta(r.Context(), round)
 		if err != nil {
-			renderStoreErr(w, err)
+			renderStoreErr(w, err, errFailedLookingUpLedger)
 			return
 		}
 		defer closer.Close()
 		bBlob, err := getBlockBlobFromBDBlob(data)
 		if err != nil {
-			server.RenderErrInternal(w, err)
+			server.RenderErrInternal(w, errFailedEncodingResponse, err)
 			return
 		}
 		server.RenderBlob(w, "application/msgpack", bBlob, blockResponseHasBlockCacheControl)
@@ -196,7 +200,7 @@ func (s *Server) GetLedgerBlockData() http.HandlerFunc {
 		}
 		data, closer, err := s.dbStore.GetLedgerStateDelta(r.Context(), round)
 		if err != nil {
-			renderStoreErr(w, err)
+			renderStoreErr(w, err, errFailedLookingUpLedger)
 			return
 		}
 		defer closer.Close()
@@ -225,7 +229,7 @@ func (s *Server) PutLedgerStateDelta() http.HandlerFunc {
 		defer r.Body.Close()
 		bData, err := io.ReadAll(r.Body)
 		if err != nil {
-			server.RenderErrInternal(w, err)
+			server.RenderErrInvalidRequest(w, fmt.Errorf("failed to read request body: %w", err))
 			return
 		}
 
@@ -240,7 +244,7 @@ func (s *Server) PutLedgerStateDelta() http.HandlerFunc {
 		}
 
 		if err := s.dbStore.PutLedgerBlockData(r.Context(), round, bData); err != nil {
-			renderStoreErr(w, err)
+			renderStoreErr(w, err, errFailedLookingUpLedger)
 			return
 		}
 		server.RenderEmptyOK(w)
@@ -260,7 +264,7 @@ func (s *Server) GetLedgerGenesis() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		blob, closer, err := s.dbStore.GetLedgerGenesis(r.Context())
 		if err != nil {
-			renderStoreErr(w, err)
+			renderStoreErr(w, err, "genesis not found")
 			return
 		}
 		defer closer.Close()
@@ -283,7 +287,7 @@ func (s *Server) PutLedgerGenesis() http.HandlerFunc {
 		defer r.Body.Close()
 		gData, err := io.ReadAll(r.Body)
 		if err != nil {
-			server.RenderErrInternal(w, err)
+			server.RenderErrInvalidRequest(w, fmt.Errorf("failed to read request body: %w", err))
 			return
 		}
 
@@ -293,7 +297,7 @@ func (s *Server) PutLedgerGenesis() http.HandlerFunc {
 		}
 
 		if err := s.dbStore.PutLedgerGenesis(r.Context(), gData); err != nil {
-			renderStoreErr(w, err)
+			renderStoreErr(w, err, "genesis not found")
 			return
 		}
 		server.RenderEmptyOK(w)
