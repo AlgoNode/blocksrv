@@ -2,8 +2,7 @@ EXECUTABLE := gorestapicmd
 GITVERSION ?= 1.10.0-blksrv
 GOPATH ?= ${HOME}/go
 PACKAGENAME := $(shell go list -m -f '{{.Path}}')
-TOOLS := ${GOPATH}/bin/mockery \
-	${GOPATH}/bin/swag
+TOOLS := ${GOPATH}/bin/swag
 SWAGGERSOURCE = $(wildcard gorestapi/*.go) \
 	$(wildcard gorestapi/mainrpc/*.go)
 
@@ -11,9 +10,6 @@ SWAGGERSOURCE = $(wildcard gorestapi/*.go) \
 default: ${EXECUTABLE}
 
 tools: ${TOOLS}
-
-${GOPATH}/bin/mockery:
-	go install github.com/vektra/mockery/cmd/mockery@latest
 
 ${GOPATH}/bin/swag:
 	go install github.com/swaggo/swag/cmd/swag@latest
@@ -27,10 +23,6 @@ embed/public_html/v1/api-docs/swagger.json: tools ${SWAGGERSOURCE}
 	swag init --dir . --generalInfo gorestapi/swagger.go --exclude embed --output embed/public_html/v1/api-docs
 	rm embed/public_html/v1/api-docs/docs.go
 
-.PHONY: mocks
-mocks: tools
-	mockery -dir ./gorestapi -name GRStore
-
 .PHONY: ${EXECUTABLE}
 ${EXECUTABLE}: tools embed/public_html/v1/api-docs/swagger.json
 	# Compiling...
@@ -39,8 +31,14 @@ ${EXECUTABLE}: tools embed/public_html/v1/api-docs/swagger.json
 
 
 .PHONY: test
-test: tools mocks
+test:
 	go test -cover ./...
+
+# Runs the SeaweedFS integration tests against a live S3 gateway, e.g.
+#   make test-integration SEAWEED_TEST_ENDPOINT=localhost:8333 SEAWEED_TEST_ACCESS_KEY=... SEAWEED_TEST_SECRET_KEY=...
+.PHONY: test-integration
+test-integration:
+	go test -count=1 -run Integration ./store/seaweed/
 
 .PHONY: deps
 deps:

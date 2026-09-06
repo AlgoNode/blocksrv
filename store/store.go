@@ -5,10 +5,20 @@ import (
 	"fmt"
 )
 
-// ErrNotFound is a standard not found error
+// Standard storage errors shared by every backend.
 var (
+	// ErrNotFound is returned when a round, the genesis or a meta key does not exist.
 	ErrNotFound = errors.New("not found")
+	// ErrConflict is returned when a write would replace existing data with
+	// something incompatible, e.g. a genesis for a different network.
+	ErrConflict = errors.New("conflict")
 )
+
+// GenesisInfo identifies the ledger a store holds, in the same form as algod's /v2/status.
+type GenesisInfo struct {
+	ID   string `json:"genesis-id"`
+	Hash string `json:"genesis-hash"` // base64 of the genesis hash
+}
 
 type ErrorType int
 type ErrorOp int

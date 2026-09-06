@@ -55,6 +55,10 @@ func RenderErrInvalidRequest(w http.ResponseWriter, err error) {
 	RenderJSON(w, http.StatusBadRequest, ErrResponse{Status: "invalid request", Error: errString(err)})
 }
 
+func RenderErrConflict(w http.ResponseWriter, err error) {
+	RenderJSON(w, http.StatusConflict, ErrResponse{Status: "conflict", Error: errString(err)})
+}
+
 func RenderErrInternal(w http.ResponseWriter, err error) {
 	RenderJSON(w, http.StatusInternalServerError, ErrResponse{Status: "internal error", Error: errString(err)})
 }

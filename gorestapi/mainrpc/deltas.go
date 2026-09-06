@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/algonode/blocksrv/server"
+	"github.com/algonode/blocksrv/store/blockcodec"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -14,7 +15,22 @@ type SyncGetResponse struct {
 	Round uint64 `json:"round"`
 }
 
+// StatusResponse is the algod-compatible subset of /v2/status blocksrv can answer.
+type StatusResponse struct {
+	LastRound   uint64 `json:"last-round"`
+	GenesisID   string `json:"genesis-id,omitempty"`
+	GenesisHash string `json:"genesis-hash,omitempty"`
+}
+
 const blockResponseHasBlockCacheControl = "public, max-age=31536000, immutable" // 31536000 seconds are one year.
+
+func parseRound(r *http.Request) (uint64, error) {
+	strRound := chi.URLParam(r, "round")
+	if strRound == "" {
+		return 0, fmt.Errorf("required round parameter missing")
+	}
+	return strconv.ParseUint(strRound, 10, 64)
+}
 
 // SyncGet Gets
 //
@@ -64,6 +80,26 @@ func (s *Server) SyncPost() http.HandlerFunc {
 	}
 }
 
+// StatusGet returns the last stored round and the genesis identity.
+//
+// @ID StatusGet
+// @Tags Ledger
+// @Summary Status
+// @Description Last stored round and genesis identity (algod /v2/status subset)
+// @Success 200 {object} StatusResponse
+// @Router /v2/status [get]
+func (s *Server) StatusGet() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		resp := StatusResponse{LastRound: s.dbStore.GetLedgerLastBlock()}
+		if gi, ok := s.dbStore.GetLedgerGenesisInfo(); ok {
+			resp.GenesisID = gi.ID
+			resp.GenesisHash = gi.Hash
+		}
+		w.Header().Set("Cache-Control", "no-cache")
+		server.RenderJSON(w, http.StatusOK, resp)
+	}
+}
+
 // GetLedgerStateDelta Gets Block with deltas
 //
 // @ID GetLedgerStateDelta
@@ -72,23 +108,19 @@ func (s *Server) SyncPost() http.HandlerFunc {
 // @Description GetLedgerStateDelta
 // @Param round path int true "round number" example(1)
 // @Success 200
+// @Failure 404 {object} server.ErrResponse "Round not found"
 // @Failure 500 {object} server.ErrResponse "Internal Error"
 // @Router /v2/deltas/{round} [get]
 func (s *Server) GetLedgerStateDelta() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		strRound := chi.URLParam(r, "round")
-		if strRound == "" {
-			server.RenderErrInvalidRequest(w, fmt.Errorf("required round parameter missing"))
-			return
-		}
-		round, err := strconv.ParseUint(strRound, 10, 64)
+		round, err := parseRound(r)
 		if err != nil {
 			server.RenderErrInvalidRequest(w, err)
 			return
 		}
 		data, closer, err := s.dbStore.GetLedgerStateDelta(r.Context(), round)
 		if err != nil {
-			server.RenderErrInvalidRequest(w, err)
+			renderStoreErr(w, err)
 			return
 		}
 		defer closer.Close()
@@ -111,21 +143,27 @@ func (s *Server) GetLedgerStateDelta() http.HandlerFunc {
 	}
 }
 
+// GetLedgerBlock returns the algod-shaped block (header, payset, cert) as msgpack.
+//
+// @ID GetLedgerBlock
+// @Tags Ledger
+// @Summary GetLedgerBlock
+// @Description Block with certificate, msgpack encoded like algod /v2/blocks/{round}?format=msgpack
+// @Param round path int true "round number" example(1)
+// @Success 200
+// @Failure 404 {object} server.ErrResponse "Round not found"
+// @Failure 500 {object} server.ErrResponse "Internal Error"
+// @Router /v2/blocks/{round} [get]
 func (s *Server) GetLedgerBlock() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		strRound := chi.URLParam(r, "round")
-		if strRound == "" {
-			server.RenderErrInvalidRequest(w, fmt.Errorf("required round parameter missing"))
-			return
-		}
-		round, err := strconv.ParseUint(strRound, 10, 64)
+		round, err := parseRound(r)
 		if err != nil {
 			server.RenderErrInvalidRequest(w, err)
 			return
 		}
 		data, closer, err := s.dbStore.GetLedgerStateDelta(r.Context(), round)
 		if err != nil {
-			server.RenderErrInvalidRequest(w, err)
+			renderStoreErr(w, err)
 			return
 		}
 		defer closer.Close()
@@ -138,21 +176,27 @@ func (s *Server) GetLedgerBlock() http.HandlerFunc {
 	}
 }
 
+// GetLedgerBlockData returns the raw stored BlockData blob.
+//
+// @ID GetLedgerBlockData
+// @Tags Conduit
+// @Summary GetLedgerBlockData
+// @Description Raw conduit BlockData (header, payset, delta, cert) msgpack blob
+// @Param round path int true "round number" example(1)
+// @Success 200
+// @Failure 404 {object} server.ErrResponse "Round not found"
+// @Failure 500 {object} server.ErrResponse "Internal Error"
+// @Router /n2/conduit/blockdata/{round} [get]
 func (s *Server) GetLedgerBlockData() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		strRound := chi.URLParam(r, "round")
-		if strRound == "" {
-			server.RenderErrInvalidRequest(w, fmt.Errorf("required round parameter missing"))
-			return
-		}
-		round, err := strconv.ParseUint(strRound, 10, 64)
+		round, err := parseRound(r)
 		if err != nil {
 			server.RenderErrInvalidRequest(w, err)
 			return
 		}
 		data, closer, err := s.dbStore.GetLedgerStateDelta(r.Context(), round)
 		if err != nil {
-			server.RenderErrInvalidRequest(w, err)
+			renderStoreErr(w, err)
 			return
 		}
 		defer closer.Close()
@@ -160,14 +204,20 @@ func (s *Server) GetLedgerBlockData() http.HandlerFunc {
 	}
 }
 
+// PutLedgerStateDelta stores a raw BlockData blob for a round.
+//
+// @ID PutLedgerBlockData
+// @Tags Conduit
+// @Summary PutLedgerBlockData
+// @Description Store a raw conduit BlockData msgpack blob
+// @Param round path int true "round number" example(1)
+// @Success 200
+// @Failure 400 {object} server.ErrResponse "Invalid blob or round mismatch"
+// @Failure 500 {object} server.ErrResponse "Internal Error"
+// @Router /n2/conduit/blockdata/{round} [put]
 func (s *Server) PutLedgerStateDelta() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		strRound := chi.URLParam(r, "round")
-		if strRound == "" {
-			server.RenderErrInvalidRequest(w, fmt.Errorf("required round parameter missing"))
-			return
-		}
-		round, err := strconv.ParseUint(strRound, 10, 64)
+		round, err := parseRound(r)
 		if err != nil {
 			server.RenderErrInvalidRequest(w, err)
 			return
@@ -179,9 +229,9 @@ func (s *Server) PutLedgerStateDelta() http.HandlerFunc {
 			return
 		}
 
-		bd, err := getBlockDataFromBDBlob(bData)
+		bd, err := blockcodec.DecodeBlockData(bData)
 		if err != nil {
-			server.RenderErrInternal(w, err)
+			server.RenderErrInvalidRequest(w, err)
 			return
 		}
 		if bd.Round() != round {
@@ -189,20 +239,28 @@ func (s *Server) PutLedgerStateDelta() http.HandlerFunc {
 			return
 		}
 
-		err = s.dbStore.PutLedgerBlockData(r.Context(), round, bData)
-		if err != nil {
-			server.RenderErrInvalidRequest(w, err)
+		if err := s.dbStore.PutLedgerBlockData(r.Context(), round, bData); err != nil {
+			renderStoreErr(w, err)
 			return
 		}
 		server.RenderEmptyOK(w)
 	}
 }
 
+// GetLedgerGenesis returns the raw genesis msgpack blob.
+//
+// @ID GetLedgerGenesis
+// @Tags Conduit
+// @Summary GetLedgerGenesis
+// @Description Raw genesis msgpack blob
+// @Success 200
+// @Failure 404 {object} server.ErrResponse "No genesis stored"
+// @Router /n2/conduit/genesis [get]
 func (s *Server) GetLedgerGenesis() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		blob, closer, err := s.dbStore.GetLedgerGenesis(r.Context())
 		if err != nil {
-			server.RenderErrInvalidRequest(w, err)
+			renderStoreErr(w, err)
 			return
 		}
 		defer closer.Close()
@@ -210,6 +268,16 @@ func (s *Server) GetLedgerGenesis() http.HandlerFunc {
 	}
 }
 
+// PutLedgerGenesis stores the genesis msgpack blob.
+//
+// @ID PutLedgerGenesis
+// @Tags Conduit
+// @Summary PutLedgerGenesis
+// @Description Store the genesis msgpack blob; a different genesis than the stored one is refused
+// @Success 200
+// @Failure 400 {object} server.ErrResponse "Invalid genesis"
+// @Failure 409 {object} server.ErrResponse "Genesis mismatch"
+// @Router /n2/conduit/genesis [put]
 func (s *Server) PutLedgerGenesis() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
@@ -219,15 +287,13 @@ func (s *Server) PutLedgerGenesis() http.HandlerFunc {
 			return
 		}
 
-		_, err = getGenesisFromGenesisBlob(gData)
-		if err != nil {
-			server.RenderErrInternal(w, err)
+		if _, err := blockcodec.DecodeGenesis(gData); err != nil {
+			server.RenderErrInvalidRequest(w, err)
 			return
 		}
 
-		err = s.dbStore.PutLedgerGenesis(r.Context(), gData)
-		if err != nil {
-			server.RenderErrInvalidRequest(w, err)
+		if err := s.dbStore.PutLedgerGenesis(r.Context(), gData); err != nil {
+			renderStoreErr(w, err)
 			return
 		}
 		server.RenderEmptyOK(w)

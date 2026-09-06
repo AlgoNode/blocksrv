@@ -51,8 +51,30 @@ func Defaults(c *koanf.Koanf) error {
 		"server.cors.allowed_credentials": false,
 		"server.cors.max_age":             300,
 
+		// Storage backend: pebble | seaweed
+		"store.backend": "pebble",
+
 		// pebble Settings
 		"pebble.path": "mainnnet",
+
+		// SeaweedFS S3 gateway settings
+		"seaweed.endpoint":    "localhost:8333", // host:port, no scheme
+		"seaweed.use_ssl":     false,
+		"seaweed.access_key":  "", // empty pair = anonymous (unsigned) requests
+		"seaweed.secret_key":  "",
+		"seaweed.region":      "us-east-1",
+		"seaweed.bucket":      "mainnet",
+		"seaweed.prefix":      "", // optional key prefix inside the bucket, e.g. "v1/"
+		"seaweed.timeout":     "30s",
+		"seaweed.max_retries": 3,
+
+		// Remote import: mirror blocks from another blocksrv (migration)
+		"import.from":    "", // base URL of the source blocksrv; empty = disabled
+		"import.start":   0,
+		"import.end":     0, // 0 = the source's current last round
+		"import.follow":  true,
+		"import.workers": 8,
+		"import.timeout": "60s",
 	}, "."), nil)
 }
 

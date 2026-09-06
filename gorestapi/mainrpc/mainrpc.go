@@ -44,6 +44,8 @@ func Setup(router chi.Router, dbStore gorestapi.Ledger) error {
 		r.Post("/sync", s.SyncPost())
 	})
 
+	s.router.Get("/v2/status", s.StatusGet())
+
 	s.router.Route("/v2/deltas", func(r chi.Router) {
 		r.Get("/{round}", s.GetLedgerStateDelta())
 	})

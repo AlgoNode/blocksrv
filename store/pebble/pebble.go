@@ -1,34 +1,43 @@
+// Package pebble is the local PebbleDB storage backend.
 package pebble
 
 import (
+	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"runtime"
-	"strconv"
+	"sync"
 	"sync/atomic"
 
-	"github.com/algorand/go-algorand-sdk/v2/encoding/msgpack"
-	"github.com/algorand/go-algorand-sdk/v2/types"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/knadh/koanf/v2"
 	"go.uber.org/zap"
+
+	"github.com/algonode/blocksrv/store"
+	"github.com/algonode/blocksrv/store/blockcodec"
+	"github.com/algonode/blocksrv/store/rounds"
 )
 
 const (
 	keyLastRound = "lastRound"
 	keyGenesis   = "genesis"
+	metaPrefix   = "meta-"
+	probeLimit   = 100_000
 )
 
 // Client is the database client
 type Client struct {
-	logger    *zap.SugaredLogger
-	db        *pebble.DB
-	b         *bulletin
-	lastRound atomic.Uint64
+	logger  *zap.SugaredLogger
+	db      *pebble.DB
+	rt      *rounds.Tracker
+	genesis atomic.Pointer[store.GenesisInfo]
+
+	lastMu    sync.Mutex
+	persisted uint64 // lastRound value known to be on disk
 }
 
 func pebbleInit(path string, logger *zap.SugaredLogger) (*pebble.DB, error) {
@@ -54,142 +63,200 @@ func pebbleInit(path string, logger *zap.SugaredLogger) (*pebble.DB, error) {
 	}
 	opts.Levels[6].FilterPolicy = nil
 
-	db, err := pebble.Open(path, opts)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return db, nil
+	return pebble.Open(path, opts)
 }
 
-// New returns a new database client
+// New opens the database and resolves the last stored round.
 func New(cfg *koanf.Koanf) (*Client, error) {
-
 	logger := zap.S().With("package", "store.pebble")
 	path := cfg.String("pebble.path")
 	db, err := pebbleInit(path, logger)
 	if err != nil {
 		return nil, err
 	}
+	c := &Client{logger: logger, db: db}
 
-	c := &Client{
-		logger: logger,
-		db:     db,
-	}
-
-	key := []byte(keyLastRound)
-	bVal, closer, err := db.Get(key)
-	last := uint64(0)
+	persisted, err := c.loadLastRnd()
 	if err != nil {
-		last = 0
-	} else {
-		last = binary.LittleEndian.Uint64(bVal)
-		defer closer.Close()
+		_ = db.Close()
+		return nil, err
 	}
+	last := persisted
 	if last == 0 {
-		last = c.findLast()
-		c.saveLastRnd(last)
+		last = rounds.FindLast(c.existsRnd, rounds.MaxRound)
 	}
-
-	key = []byte(keyGenesis)
-	bVal, closer, err = db.Get(key)
-
-	c.b = makeBulletin(last)
-	c.lastRound.Store(last)
+	last = rounds.ProbeForward(c.existsRnd, last, probeLimit)
+	c.persisted = persisted
+	c.rt = rounds.New(last)
+	if err := c.persistLast(last); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := c.refreshGenesisInfo(); err != nil && !errors.Is(err, store.ErrNotFound) {
+		logger.Warnw("stored genesis is unreadable", "error", err)
+	}
 	logger.Infof("Initialized PebbleDB store:%s with lastRound:%d GH:%s", path, last, c.GetLedgerGenesisB64())
-
 	return c, nil
 }
 
-func (c *Client) saveLastRnd(round uint64) error {
+func blockKey(round uint64) []byte { return []byte(fmt.Sprintf("dblock-%d", round)) }
+func metaKey(key string) []byte    { return []byte(metaPrefix + key) }
+
+func mapErr(err error) error {
+	if errors.Is(err, pebble.ErrNotFound) {
+		return store.ErrNotFound
+	}
+	return err
+}
+
+func (c *Client) loadLastRnd() (uint64, error) {
+	val, closer, err := c.db.Get([]byte(keyLastRound))
+	if errors.Is(err, pebble.ErrNotFound) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	defer closer.Close()
+	if len(val) != 8 {
+		return 0, fmt.Errorf("corrupt %s value (%d bytes)", keyLastRound, len(val))
+	}
+	return binary.LittleEndian.Uint64(val), nil
+}
+
+// persistLast writes round as lastRound unless a higher value is already on disk.
+func (c *Client) persistLast(round uint64) error {
+	c.lastMu.Lock()
+	defer c.lastMu.Unlock()
+	if round <= c.persisted {
+		return nil
+	}
 	buf := make([]byte, 8)
-	key := []byte(keyLastRound)
 	binary.LittleEndian.PutUint64(buf, round)
-	return c.db.Set(key, buf, pebble.Sync)
+	if err := c.db.Set([]byte(keyLastRound), buf, pebble.Sync); err != nil {
+		return err
+	}
+	c.persisted = round
+	return nil
 }
 
 func (c *Client) existsRnd(round uint64) bool {
-	key := []byte(fmt.Sprintf("dblock-%d", round))
-	_, closer, err := c.db.Get(key)
+	ok, err := c.HasLedgerBlock(context.Background(), round)
 	if err != nil {
-		return false
+		c.logger.Warnw("probe failed", "round", round, "error", err)
 	}
-	closer.Close()
-	c.logger.Infof("exists %d", round)
-	return true
+	return ok
 }
 
-func (c *Client) findLast() uint64 {
-	n := uint64(100_000_000)
-	l := uint64(0)
-	h := n - 1
-	c.logger.Infof("looking for last round %d..%d", l, h)
-	for h > l {
-		mid := (h + l) >> 1
-		if c.existsRnd(mid) {
-			l = mid
-		} else {
-			h = mid - 1
-		}
-		if h-l == 1 {
-			if c.existsRnd(h) {
-				return h
-			}
-			return l
-		}
-	}
-	return l
-}
-
+// GetLedgerStateDelta returns the raw BlockData blob, long-polling for future rounds.
 func (c *Client) GetLedgerStateDelta(ctx context.Context, round uint64) ([]byte, io.Closer, error) {
-	if round > c.GetLedgerLastBlock() {
-		if _, err := c.WaitLedgerBlock(ctx, round); err != nil {
+	if round > c.rt.Last() {
+		if _, err := c.rt.Wait(ctx, round); err != nil {
 			return nil, nil, err
 		}
 	}
-	key := []byte(fmt.Sprintf("dblock-%d", round))
-	return c.db.Get(key)
+	val, closer, err := c.db.Get(blockKey(round))
+	return val, closer, mapErr(err)
 }
 
-func (c *Client) PutLedgerBlockData(context context.Context, round uint64, bData []byte) error {
-	key := []byte(fmt.Sprintf("dblock-%d", round))
-	if err := c.db.Set(key, bData, &pebble.WriteOptions{Sync: true}); err != nil {
+// PutLedgerBlockData stores the raw BlockData blob for round.
+func (c *Client) PutLedgerBlockData(ctx context.Context, round uint64, bData []byte) error {
+	if err := c.db.Set(blockKey(round), bData, pebble.Sync); err != nil {
 		return err
 	}
-	go func() {
-		if c.updateLedgerLastBlock(round) {
-			c.logger.With("round", strconv.Itoa(int(round))).Info("New block")
-		}
-	}()
+	if c.rt.Advance(round) {
+		c.logger.With("round", round).Info("New block")
+		go func() {
+			if err := c.persistLast(c.rt.Last()); err != nil {
+				c.logger.Errorw("persist lastRound", "error", err)
+			}
+		}()
+	}
 	return nil
+}
+
+// HasLedgerBlock reports whether round is stored.
+func (c *Client) HasLedgerBlock(ctx context.Context, round uint64) (bool, error) {
+	_, closer, err := c.db.Get(blockKey(round))
+	if errors.Is(err, pebble.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	_ = closer.Close()
+	return true, nil
 }
 
 func (c *Client) GetLedgerGenesis(ctx context.Context) ([]byte, io.Closer, error) {
-	key := []byte(keyGenesis)
-	return c.db.Get(key)
+	val, closer, err := c.db.Get([]byte(keyGenesis))
+	return val, closer, mapErr(err)
 }
 
-func (c *Client) GetLedgerGenesisB64() string {
-	gBlob, closer, err := c.GetLedgerGenesis(context.Background())
+func (c *Client) PutLedgerGenesis(ctx context.Context, gData []byte) error {
+	info, err := blockcodec.GenesisInfo(gData)
 	if err != nil {
-		return ""
-	}
-	g := &types.Genesis{}
-	err = msgpack.Decode(gBlob, g)
-	if err != nil {
-		return ""
-	}
-	gh := g.Hash()
-	ghb64 := base64.StdEncoding.EncodeToString(gh[:])
-	closer.Close()
-	return ghb64
-}
-
-func (c *Client) PutLedgerGenesis(context context.Context, gData []byte) error {
-	key := []byte(keyGenesis)
-	if err := c.db.Set(key, gData, &pebble.WriteOptions{Sync: true}); err != nil {
 		return err
 	}
+	if cur := c.genesis.Load(); cur != nil && cur.Hash != info.Hash {
+		return fmt.Errorf("%w: store already holds genesis %s", store.ErrConflict, cur.ID)
+	}
+	if err := c.db.Set([]byte(keyGenesis), gData, pebble.Sync); err != nil {
+		return err
+	}
+	c.genesis.Store(&info)
 	return nil
+}
+
+func (c *Client) refreshGenesisInfo() error {
+	blob, closer, err := c.GetLedgerGenesis(context.Background())
+	if err != nil {
+		return err
+	}
+	defer closer.Close()
+	info, err := blockcodec.GenesisInfo(blob)
+	if err != nil {
+		return err
+	}
+	c.genesis.Store(&info)
+	return nil
+}
+
+// GetLedgerGenesisInfo returns the stored genesis identity, if any.
+func (c *Client) GetLedgerGenesisInfo() (store.GenesisInfo, bool) {
+	if g := c.genesis.Load(); g != nil {
+		return *g, true
+	}
+	return store.GenesisInfo{}, false
+}
+
+// GetLedgerGenesisB64 returns the base64 genesis hash or "" when no genesis is stored.
+func (c *Client) GetLedgerGenesisB64() string {
+	info, _ := c.GetLedgerGenesisInfo()
+	return info.Hash
+}
+
+func (c *Client) GetLedgerLastBlock() uint64 { return c.rt.Last() }
+
+func (c *Client) WaitLedgerBlock(ctx context.Context, round uint64) (uint64, error) {
+	return c.rt.Wait(ctx, round)
+}
+
+// GetLedgerMeta returns a copy of a small meta value.
+func (c *Client) GetLedgerMeta(ctx context.Context, key string) ([]byte, error) {
+	val, closer, err := c.db.Get(metaKey(key))
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	defer closer.Close()
+	return bytes.Clone(val), nil
+}
+
+func (c *Client) PutLedgerMeta(ctx context.Context, key string, val []byte) error {
+	return c.db.Set(metaKey(key), val, pebble.Sync)
+}
+
+// Close flushes and closes the database.
+func (c *Client) Close() error {
+	return c.db.Close()
 }
