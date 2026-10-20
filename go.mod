@@ -14,7 +14,7 @@ require (
 
 require (
 	github.com/algorand/conduit v1.10.0
-	github.com/algorand/go-algorand-sdk/v2 v2.12.0
+	github.com/algorand/go-algorand-sdk/v2 v2.14.0
 	github.com/cockroachdb/pebble v1.1.2
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/knadh/koanf/parsers/json v0.1.0
